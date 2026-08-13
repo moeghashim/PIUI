@@ -1,0 +1,54 @@
+{
+  "name": "piui",
+  "version": "0.1.0",
+  "description": "A local-first web UI harness for the PI coding agent",
+  "type": "module",
+  "bin": {
+    "piui": "dist/server/cli.js"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"tsx watch server/cli.ts --dev\" \"vite\"",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "start": "node dist/server/cli.js",
+    "check": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:real": "vitest run --config vitest.real.config.ts"
+  },
+  "keywords": [
+    "pi",
+    "coding-agent",
+    "agent",
+    "web-ui",
+    "extensions"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "express": "5.2.1",
+    "lucide-react": "1.31.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/express": "5.0.6",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.1",
+    "@vitejs/plugin-react": "6.0.5",
+    "concurrently": "9.2.4",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
+  }
+}
