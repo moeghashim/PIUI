@@ -1,0 +1,42 @@
+{
+  "pageSize": 2,
+  "items": [
+    {
+      "name": "pi-fake-extension",
+      "description": "Fixture extension already configured in PIUI.",
+      "author": "piui-tests",
+      "downloads": 9000,
+      "downloadsLabel": "9K/mo",
+      "updated": "1d ago",
+      "types": ["extension"],
+      "detailsUrl": "https://pi.dev/packages/pi-fake-extension?type=extension",
+      "npmUrl": "https://www.npmjs.com/package/pi-fake-extension",
+      "repositoryUrl": "https://github.com/example/pi-fake-extension",
+      "installCommand": "pi install npm:pi-fake-extension"
+    },
+    {
+      "name": "pi-marketplace-tools",
+      "description": "A marketplace-only extension for browsing QA.",
+      "author": "fixture-author",
+      "downloads": 4200,
+      "downloadsLabel": "4.2K/mo",
+      "updated": "2d ago",
+      "types": ["extension", "skill"],
+      "detailsUrl": "https://pi.dev/packages/pi-marketplace-tools?type=extension",
+      "npmUrl": "https://www.npmjs.com/package/pi-marketplace-tools",
+      "installCommand": "pi install npm:pi-marketplace-tools"
+    },
+    {
+      "name": "@fixture/pi-companion",
+      "description": "A scoped extension on the second marketplace page.",
+      "author": "fixture-author",
+      "downloads": 100,
+      "downloadsLabel": "100/mo",
+      "updated": "3d ago",
+      "types": ["extension"],
+      "detailsUrl": "https://pi.dev/packages/@fixture/pi-companion?type=extension",
+      "npmUrl": "https://www.npmjs.com/package/@fixture/pi-companion",
+      "installCommand": "pi install npm:@fixture/pi-companion"
+    }
+  ]
+}

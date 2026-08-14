@@ -13,6 +13,7 @@ PIUI is a local-first web UI harness for the [PI coding agent](https://github.co
 - Slash-command discovery for extensions, skills, and prompt templates
 - Image attachments, context compaction, retry controls, HTML export, session metrics, and a searchable trajectory ledger
 - PI extension UI over RPC: select, confirm, input, editor, notifications, status, text widgets, title, and editor-text updates
+- Full paginated extension marketplace from PI's official catalog, with search, sorting, installed-state matching, npm links, and copyable install commands
 - Read-only configured extension inventory, including packages and top-level extension files
 - Explicit project trust before PI loads project-local extensions
 - Responsive light, dark, and system themes with accessible native dialogs
@@ -60,6 +61,8 @@ For development, run `npm run dev`; Vite proxies `/api` and WebSocket traffic to
 ## Extension compatibility
 
 PI extensions are the equivalent of DeepSeek Harness plugins. Their agent-facing behavior—tools, events, commands, provider hooks, session state—runs normally inside PI.
+
+The Extensions settings page browses every package tagged as an extension in the official `pi.dev` catalog. Marketplace data is fetched through a fixed, cached, loopback server endpoint; PIUI never installs third-party code automatically. The Installed tab remains authoritative for the user's configured local sources.
 
 PI's RPC mode supports generic web rendering for:
 

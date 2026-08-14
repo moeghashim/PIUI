@@ -46,6 +46,29 @@ export interface ExtensionItem {
   resources: string[];
 }
 
+export interface MarketplaceExtension {
+  name: string;
+  description: string;
+  author: string;
+  downloads: number;
+  downloadsLabel: string;
+  updated: string;
+  types: string[];
+  detailsUrl: string;
+  npmUrl: string;
+  repositoryUrl?: string;
+  installCommand: string;
+}
+
+export interface MarketplacePage {
+  items: MarketplaceExtension[];
+  page: number;
+  pages: number;
+  total: number;
+  allPackagesTotal?: number;
+  source: "pi.dev" | "fixture";
+}
+
 export interface ModelInfo {
   provider: string;
   id: string;

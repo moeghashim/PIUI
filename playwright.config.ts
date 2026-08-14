@@ -11,7 +11,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "PIUI_PI_CLI=$PWD/test/fixtures/fake-pi.mjs PIUI_FOLDER_PICKER_PATH=$PWD node dist/server/cli.js --no-open --port 31416",
+    command: "PIUI_PI_CLI=$PWD/test/fixtures/fake-pi.mjs PIUI_FOLDER_PICKER_PATH=$PWD PIUI_MARKETPLACE_FIXTURE=$PWD/test/fixtures/marketplace.json node dist/server/cli.js --no-open --port 31416",
     url: "http://127.0.0.1:31416/api/bootstrap",
     reuseExistingServer: false,
     timeout: 30_000,

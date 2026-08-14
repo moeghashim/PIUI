@@ -9,6 +9,7 @@ import { listExtensions, listSessions, sessionWorkspace, validateSessionPath, va
 import { chooseWorkspaceFolder } from "./folder-picker.js";
 import { PiProcess } from "./pi-process.js";
 import { isBrowserMessage, type ServerEnvelope } from "./protocol.js";
+import { listMarketplaceExtensions, type MarketplaceSort } from "./marketplace.js";
 
 export interface PiuiServerOptions {
   host?: string;
@@ -63,6 +64,17 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
       return res.json({ path: await validateWorkspace(selected) });
     } catch (error) {
       return res.status(500).json({ error: messageOf(error) });
+    }
+  });
+  app.get("/api/marketplace/extensions", async (req, res) => {
+    try {
+      const page = Number(req.query.page ?? 1);
+      const name = typeof req.query.name === "string" ? req.query.name : "";
+      const sort = typeof req.query.sort === "string" ? req.query.sort as MarketplaceSort : "downloads";
+      res.setHeader("Cache-Control", "private, max-age=60");
+      return res.json(await listMarketplaceExtensions({ page, name, sort }));
+    } catch (error) {
+      return res.status(502).json({ error: messageOf(error) });
     }
   });
   if (existsSync(webRoot)) app.use(express.static(webRoot, { index: false }));

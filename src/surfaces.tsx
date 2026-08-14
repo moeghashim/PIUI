@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Brain, Check, ChevronRight, CircleDollarSign,
-  Copy, Download, FileCode2, Folder, GitFork, Gauge, Info, MessageSquare, Package, RefreshCw,
+  Activity, AlertTriangle, Archive, BarChart3, Brain, Check, ChevronLeft, ChevronRight, CircleDollarSign,
+  Copy, Download, ExternalLink, FileCode2, Folder, GitFork, Gauge, Info, LoaderCircle, MessageSquare, Package, RefreshCw,
   Search, Settings2, ShieldAlert, Sparkles, TerminalSquare, Wrench, X,
 } from "lucide-react";
-import type { ExtensionItem, ModelInfo, RpcState, SlashCommand } from "./types";
+import type { ExtensionItem, MarketplacePage, ModelInfo, RpcState, SlashCommand } from "./types";
 
 export type ThemeChoice = "system" | "dark" | "light";
 export type SettingsTab = "general" | "models" | "extensions" | "session";
@@ -82,8 +82,6 @@ export function SettingsDialog({ initialTab, state, ready, runtime, models, thin
   initialTab: SettingsTab; state: RpcState | undefined; ready: boolean; runtime: Record<string, unknown>; models: ModelInfo[]; thinkingLevels: string[]; extensions: ExtensionItem[]; commands: SlashCommand[]; stats: Record<string, unknown>; theme: ThemeChoice; busyMode: "steer"|"followUp"; close: () => void; showModelPicker: () => void; onTheme: (theme: ThemeChoice) => void; onBusyMode: (mode: "steer"|"followUp") => void; onThinking: (level: string) => void; onCommand: (command: Record<string,unknown>) => void; onRename: () => void; onClone: () => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const [extensionSearch, setExtensionSearch] = useState("");
-  const filteredExtensions = extensions.filter((item) => `${item.name} ${item.source} ${item.scope}`.toLowerCase().includes(extensionSearch.toLowerCase()));
   return <ModalSurface className="settings-dialog" labelledBy="settings-title" close={close}>
     <aside className="settings-nav"><h2 id="settings-title">Settings</h2>{(["general","models","extensions","session"] as const).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "general" ? <Settings2/> : item === "models" ? <Sparkles/> : item === "extensions" ? <Package/> : <BarChart3/>}{item.charAt(0).toUpperCase()+item.slice(1)}</button>)}</aside>
     <section className="settings-content"><button className="icon-button settings-close" onClick={close} aria-label="Close settings"><X/></button>
@@ -95,10 +93,90 @@ export function SettingsDialog({ initialTab, state, ready, runtime, models, thin
         <div className="compatibility-note"><AlertTriangle/><div><strong>PI permissions</strong><span>Unlike DeepSeek Harness permission presets, PI has no built-in sandbox. PIUI shows the actual trust state rather than offering controls it cannot enforce.</span></div></div>
       </>}
       {tab === "models" && <><h2>Models</h2><p className="settings-lead">PIUI shows the selectable models returned by your local PI runtime. Providers without configured authentication stay hidden.</p><div className="current-model-card"><span className="model-icon"><Sparkles/></span><div><small>Current model</small><strong>{state?.model ? `${state.model.name ?? state.model.id}` : ready ? "No model selected" : "Starting PI…"}</strong><span>{state?.model ? `${state.model.provider}/${state.model.id}` : ""}</span></div><button className="secondary" disabled={!ready} onClick={showModelPicker}>Choose model</button></div><h3>Reasoning effort</h3><div className="effort-grid">{thinkingLevels.map((level) => <button key={level} disabled={!ready} aria-pressed={state?.thinkingLevel === level} onClick={() => onThinking(level)}><Brain/>{level}</button>)}</div><div className="inventory-summary"><span><strong>{models.length}</strong> models</span><span><strong>{new Set(models.map((model)=>model.provider)).size}</strong> authenticated providers</span></div></>}
-      {tab === "extensions" && <><h2>Extensions</h2><p className="settings-lead">PI extensions are the equivalent of DeepSeek Harness plugins.</p><div className="compatibility-note"><AlertTriangle/><div><strong>Web compatibility</strong><span>Tools, events, commands, standard dialogs, status, and text widgets work. Terminal-only custom components and renderers do not cross PI RPC.</span></div></div><label className="search dialog-search"><Search/><input value={extensionSearch} onChange={(event) => setExtensionSearch(event.target.value)} placeholder="Search configured extension sources" aria-label="Search extensions"/></label><div className="inventory-summary"><span><strong>{extensions.length}</strong> configured sources</span><span><strong>{commands.filter((item)=>item.source === "extension").length}</strong> commands</span></div><div className="settings-extension-list">{filteredExtensions.map((extension,index) => <div className="extension-row" key={`${extension.path}-${index}`}><span className="extension-logo"><Package/></span><div><strong>{extension.name}</strong><small>{extension.source}</small><span>{extension.scope} · {extension.resources.length} resource{extension.resources.length === 1 ? "" : "s"}</span></div><em>configured</em></div>)}</div></>}
+      {tab === "extensions" && <MarketplaceExtensions extensions={extensions} commands={commands}/>}
       {tab === "session" && <><h2>Session</h2><p className="settings-lead">History, context, retries, and export controls for this PI session.</p><div className="session-action-grid"><button disabled={!ready} onClick={onRename}><FileCode2/>Rename session</button><button disabled={!ready} onClick={onClone}><GitFork/>Clone branch</button><button disabled={!ready || state?.isStreaming} onClick={() => onCommand({type:"compact"})}><Archive/>Compact context</button><button disabled={!ready} onClick={() => onCommand({type:"export_html"})}><Download/>Export HTML</button></div><SettingRow title="Auto compaction" description="Compact automatically when context is nearly full."><button className="toggle" role="switch" aria-checked={Boolean(state?.autoCompactionEnabled)} disabled={!ready} onClick={() => onCommand({type:"set_auto_compaction",enabled:!state?.autoCompactionEnabled})}><i/></button></SettingRow><SettingRow title="Auto retry" description="Retry transient provider errors automatically."><button className="toggle" role="switch" aria-checked={Boolean(state?.autoRetryEnabled)} disabled={!ready} onClick={() => onCommand({type:"set_auto_retry",enabled:!state?.autoRetryEnabled})}><i/></button></SettingRow><div className="inventory-summary"><span><strong>{String(stats.totalMessages ?? state?.messageCount ?? 0)}</strong> messages</span><span><strong>{formatCompact(Number((stats.tokens as Record<string,number>|undefined)?.total ?? 0))}</strong> tokens</span><span><strong>${Number(stats.cost ?? 0).toFixed(4)}</strong> cost</span></div></>}
     </section>
   </ModalSurface>;
+}
+
+function MarketplaceExtensions({ extensions, commands }: { extensions: ExtensionItem[]; commands: SlashCommand[] }) {
+  const [view, setView] = useState<"marketplace" | "installed">("marketplace");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"downloads" | "recent" | "name">("downloads");
+  const [page, setPage] = useState(1);
+  const [marketplace, setMarketplace] = useState<MarketplacePage>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const [copied, setCopied] = useState("");
+  const filteredInstalled = extensions.filter((item) => `${item.name} ${item.source} ${item.scope}`.toLowerCase().includes(search.toLowerCase()));
+  const installedNames = useMemo(() => new Set(extensions.map((item) => npmPackageName(item.source)).filter(Boolean)), [extensions]);
+
+  useEffect(() => {
+    if (view !== "marketplace") return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      const query = new URLSearchParams({ page: String(page), sort });
+      if (search.trim()) query.set("name", search.trim());
+      void fetch(`/api/marketplace/extensions?${query}`, { signal: controller.signal })
+        .then(async (response) => {
+          const body = await response.json() as MarketplacePage & { error?: string };
+          if (!response.ok) throw new Error(body.error ?? `Marketplace request failed (${response.status})`);
+          setMarketplace(body);
+        })
+        .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [page, refresh, search, sort, view]);
+
+  const copyInstall = (name: string, command: string) => {
+    void navigator.clipboard.writeText(command).then(() => {
+      setCopied(name);
+      window.setTimeout(() => setCopied((value) => value === name ? "" : value), 1600);
+    });
+  };
+
+  return <>
+    <h2>Extensions</h2>
+    <p className="settings-lead">Browse every extension package published in PI's official marketplace or inspect this runtime's configured sources.</p>
+    <div className="extension-view-tabs" role="tablist" aria-label="Extension catalog view">
+      <button role="tab" aria-selected={view === "marketplace"} onClick={() => { setView("marketplace"); setPage(1); }}>Marketplace</button>
+      <button role="tab" aria-selected={view === "installed"} onClick={() => setView("installed")}>Installed <span>{extensions.length}</span></button>
+    </div>
+    <div className="marketplace-tools">
+      <label className="search dialog-search"><Search/><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={view === "marketplace" ? "Search all marketplace extensions" : "Search installed extensions"} aria-label="Search extensions"/></label>
+      {view === "marketplace" && <label className="marketplace-sort"><span className="sr-only">Sort extensions</span><select aria-label="Sort extensions" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }}><option value="downloads">Most downloaded</option><option value="recent">Recently updated</option><option value="name">Name A–Z</option></select></label>}
+    </div>
+    {view === "marketplace" ? <>
+      <div className="marketplace-note"><ShieldAlert/><span><strong>Packages run as local code.</strong> Review third-party extensions before installing. PIUI lists the official catalog but does not install anything automatically.</span></div>
+      <div className="inventory-summary marketplace-summary"><span><strong>{marketplace?.total.toLocaleString() ?? "—"}</strong> matching {marketplace?.total === 1 ? "extension" : "extensions"}</span><span>Official source: <a href="https://pi.dev/packages?type=extension" target="_blank" rel="noreferrer">pi.dev <ExternalLink/></a></span></div>
+      {loading && <div className="marketplace-state"><LoaderCircle className="spin"/><span>Loading marketplace…</span></div>}
+      {!loading && error && <div className="marketplace-state error"><AlertTriangle/><div><strong>Marketplace unavailable</strong><span>{error}</span></div><button className="secondary" onClick={() => setRefresh((value) => value + 1)}>Retry</button></div>}
+      {!loading && !error && <div className="settings-extension-list marketplace-list">{marketplace?.items.map((extension) => {
+        const installed = installedNames.has(extension.name);
+        return <article className="marketplace-row" key={extension.name}>
+          <span className="extension-logo"><Package/></span>
+          <div className="marketplace-package"><div className="marketplace-name"><a href={extension.detailsUrl} target="_blank" rel="noreferrer">{extension.name}</a>{installed && <em>installed</em>}</div><p>{extension.description || "No description provided."}</p><small>{extension.author || "unknown author"} · {extension.downloadsLabel || `${extension.downloads.toLocaleString()}/mo`} · {extension.updated}</small></div>
+          <div className="marketplace-actions"><a href={extension.npmUrl} target="_blank" rel="noreferrer" aria-label={`Open ${extension.name} on npm`}>npm <ExternalLink/></a><button className="secondary" onClick={() => copyInstall(extension.name, extension.installCommand)} aria-label={`Copy install command for ${extension.name}`}><Copy/>{copied === extension.name ? "Copied" : "Install command"}</button></div>
+        </article>;
+      })}{marketplace?.items.length === 0 && <p className="empty-list">No marketplace extensions match this search.</p>}</div>}
+      {!loading && !error && marketplace && marketplace.pages > 1 && <nav className="marketplace-pagination" aria-label="Marketplace pages"><button className="secondary" disabled={marketplace.page <= 1} onClick={() => setPage(marketplace.page - 1)}><ChevronLeft/>Previous</button><span>Page <strong>{marketplace.page}</strong> of <strong>{marketplace.pages}</strong></span><button className="secondary" disabled={marketplace.page >= marketplace.pages} onClick={() => setPage(marketplace.page + 1)}>Next<ChevronRight/></button></nav>}
+    </> : <>
+      <div className="compatibility-note"><AlertTriangle/><div><strong>Web compatibility</strong><span>Tools, events, commands, standard dialogs, status, and text widgets work. Terminal-only custom components and renderers do not cross PI RPC.</span></div></div>
+      <div className="inventory-summary"><span><strong>{extensions.length}</strong> configured sources</span><span><strong>{commands.filter((item)=>item.source === "extension").length}</strong> commands</span></div>
+      <div className="settings-extension-list">{filteredInstalled.map((extension,index) => <div className="extension-row" key={`${extension.path}-${index}`}><span className="extension-logo"><Package/></span><div><strong>{extension.name}</strong><small>{extension.source}</small><span>{extension.scope} · {extension.resources.length} resource{extension.resources.length === 1 ? "" : "s"}</span></div><em>configured</em></div>)}{filteredInstalled.length === 0 && <p className="empty-list">No installed extensions match this search.</p>}</div>
+    </>}
+  </>;
+}
+
+function npmPackageName(source: string) {
+  if (!source.startsWith("npm:")) return "";
+  const value = source.slice(4);
+  const versionAt = value.lastIndexOf("@");
+  return versionAt > 0 ? value.slice(0, versionAt) : value;
 }
 
 function SettingRow({ title, description, children }: { title: string; description: string; children: ReactNode }) { return <div className="setting-row"><div><strong>{title}</strong><span>{description}</span></div><div>{children}</div></div>; }

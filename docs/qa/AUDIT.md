@@ -31,6 +31,7 @@ The reference establishes the workspace sidebar, session navigation, central con
 ![PIUI extension settings](piui/04-real-extensions.png)
 
 - General, Models, Extensions, and Session settings are keyboard-focusable native dialogs.
+- The Marketplace tab paginates the complete official extension catalog, supports remote search and sorting, labels locally configured npm packages as installed, and exposes copyable install commands without executing them.
 - The real catalog showed 28 configured extension sources and 57 extension commands in this run.
 - Inventory rows say `configured`, not `active`, because PI RPC cannot prove or hot-toggle every resource independently.
 - The UI explicitly states which standard extension surfaces work and which terminal-only components cannot cross RPC.
