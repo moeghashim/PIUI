@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Activity, AlertTriangle, Bot, Box, Brain, Check, ChevronDown, ChevronRight, CircleStop, Command, Copy, FileCode2,
-  Folder, GitFork, LoaderCircle, MessageSquarePlus, Package, PanelLeftClose, PanelRightOpen, Paperclip, Play, Plus, RefreshCw,
+  Folder, FolderOpen, GitFork, LoaderCircle, MessageSquarePlus, Package, PanelLeftClose, PanelRightOpen, Paperclip, Play, Plus, RefreshCw,
   Search, Send, Settings2, ShieldCheck, Sparkles, SquareTerminal, Wrench, X,
 } from "lucide-react";
 import type { AgentMessage, ExtensionItem, ExtensionUiRequest, RpcState, SessionItem, SlashCommand, ToolExecution } from "./types";
@@ -167,8 +167,24 @@ export function Composer({ running, settled, commands, statuses, widgets, stats,
 
 export function StartDialog({ initialCwd, session, close, start }: { initialCwd: string; session: SessionItem | undefined; close: () => void; start: (cwd: string, trusted: boolean) => void }) {
   const [cwd, setCwd] = useState(session?.cwd ?? initialCwd);
+  const [choosing, setChoosing] = useState(false);
+  const [pickerError, setPickerError] = useState("");
   const valid = Boolean(cwd.trim());
-  return <ModalSurface className="small-dialog start-modal" labelledBy="start-title" close={close}><button className="modal-close" onClick={close} aria-label="Close workspace dialog"><X/></button><div className="modal-icon"><ShieldCheck/></div><h2 id="start-title">{session ? "Resume this session?" : "Open a PI workspace"}</h2><p>PI can read, edit, and run commands in this workspace. Project extensions are code and receive the same permissions.</p><label>Workspace directory<input value={cwd} readOnly={Boolean(session)} onChange={(event) => setCwd(event.target.value)} autoFocus={!session}/></label>{session && <small className="field-note">Saved sessions always resume in their original workspace.</small>}<div className="trust-actions"><button className="secondary" disabled={!valid} onClick={() => start(cwd,false)}><ShieldCheck/> Start without project extensions</button><button className="primary" disabled={!valid} onClick={() => start(cwd,true)}><Play/> Trust & start</button></div><small>“Without project extensions” still loads your user-level PI extensions and tools.</small></ModalSurface>;
+  const chooseFolder = async () => {
+    setChoosing(true);
+    setPickerError("");
+    try {
+      const response = await fetch("/api/folder-picker", { method: "POST", headers: { Accept: "application/json" } });
+      const result = await response.json() as { path?: string | null; error?: string };
+      if (!response.ok) throw new Error(result.error || "Folder selection failed");
+      if (result.path) setCwd(result.path);
+    } catch (error) {
+      setPickerError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChoosing(false);
+    }
+  };
+  return <ModalSurface className="small-dialog start-modal" labelledBy="start-title" close={close}><button className="modal-close" onClick={close} aria-label="Close workspace dialog"><X/></button><div className="modal-icon"><ShieldCheck/></div><h2 id="start-title">{session ? "Resume this session?" : "Open a PI workspace"}</h2><p>PI can read, edit, and run commands in this workspace. Project extensions are code and receive the same permissions.</p><div className="workspace-field"><label htmlFor="workspace-directory">Workspace directory</label><div className="workspace-input-row"><input id="workspace-directory" value={cwd} readOnly={Boolean(session)} onChange={(event) => setCwd(event.target.value)} autoFocus={!session}/>{!session && <button type="button" className="folder-picker-button" onClick={()=>void chooseFolder()} disabled={choosing} aria-label="Choose workspace folder"><FolderOpen/>{choosing ? "Choosing…" : "Choose folder"}</button>}</div></div>{pickerError && <div className="picker-error" role="alert"><AlertTriangle/>{pickerError}</div>}{session && <small className="field-note">Saved sessions always resume in their original workspace.</small>}<div className="trust-actions"><button className="secondary" disabled={!valid || choosing} onClick={() => start(cwd,false)}><ShieldCheck/> Start without project extensions</button><button className="primary" disabled={!valid || choosing} onClick={() => start(cwd,true)}><Play/> Trust & start</button></div><small>“Without project extensions” still loads your user-level PI extensions and tools.</small></ModalSurface>;
 }
 
 export function ExtensionDialog({ request, respond }: { request: ExtensionUiRequest; respond: (value: Record<string, unknown>) => void }) {

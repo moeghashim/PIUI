@@ -7,6 +7,9 @@
 - Implementation: `docs/qa/piui/codex-dark-desktop.png`
 - Mobile implementation: `docs/qa/piui/codex-dark-mobile.png`
 - Intermediate-width implementation: `docs/qa/piui/codex-dark-narrow.png`
+- Folder-picker reference: `/var/folders/7n/jwn8cbhx0cj313yjrqnsj7sw0000gn/T/codex-clipboard-ead85fac-26de-4107-9755-e7131b8ae089.png`
+- Folder-picker implementation: `docs/qa/piui/folder-picker-desktop.png`
+- Folder-picker normalized comparison: `/tmp/piui-folder-picker-comparison.png`
 - Full-view comparison: `/tmp/piui-codex-comparison.png`
 - Focused composer/content comparison: `/tmp/piui-codex-focus-comparison.png`
 - Source pixels: 3024 × 1964 Retina capture, cropped to the Codex app interior and normalized to 1440 × 900.
@@ -32,6 +35,7 @@ No actionable P0, P1, or P2 visual differences remain.
 3. Post-fix evidence: `npm run test:e2e` passed all four desktop/mobile workflow and Axe checks with zero serious or critical violations. Revised captures are `docs/qa/piui/complete-desktop.png`, `docs/qa/piui/complete-mobile.png`, `docs/qa/piui/codex-dark-desktop.png`, and `docs/qa/piui/codex-dark-mobile.png`.
 4. Independent responsive review then found a P1 clipping regression between 651px and 722px and a P2 misleading context-rail header icon. The sidebar now becomes an overlay/collapsed rail at 900px, nonessential clone/rename controls hide at that breakpoint, the rail action uses an activity/details icon, and the E2E matrix includes a 700px project with per-control viewport-bound assertions.
 5. Post-fix evidence: `npm run test:e2e` passed all six desktop, 700px narrow, and mobile workflow/Axe checks. `docs/qa/piui/codex-dark-narrow.png` confirms every visible topbar control and the composer fit at the previously failing width.
+6. The workspace-dialog reference and implementation were cropped to their modal bounds, normalized to 520 × 335, and reviewed side by side. The implementation preserves the reference hierarchy, copy, trust actions, spacing rhythm, and icon treatment while adding a real `Choose folder` control beside the editable path. At 390px the path, chooser, and trust actions stack into a single readable column with no clipping.
 
 ## Focused comparison
 
@@ -41,6 +45,7 @@ The composer and lower conversation needed a focused comparison because they are
 
 - Browser workflow tested at 1440 × 900, 700 × 900, and 390 × 844.
 - Typed in the composer, attached and removed an image, selected two models, verified model-specific thinking levels, sent a streamed prompt, expanded tool output, reloaded and restored state, opened trajectory, used all settings tabs, invoked a slash command, and completed an extension confirmation dialog.
+- Opened the workspace dialog from the responsive sidebar, chose a deterministic test directory through the same-origin folder-picker API, verified the absolute path was placed in the directory field, and closed the dialog without leaving the mobile sidebar over the composer. Path normalization and cancellation are covered by unit tests; native selection is validated by the browser workflow through the platform-independent test override.
 - Viewport overflow assertions passed at both sizes.
 - Browser page errors are collected by the E2E workflow; none were reported.
 - Axe serious/critical accessibility checks passed at both sizes.

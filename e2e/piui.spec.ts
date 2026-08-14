@@ -12,6 +12,14 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
   await waitForReady(page);
   await expect(page.getByText("Fixture extension ready")).toBeVisible();
 
+  const newSession = page.getByRole("button", { name: "New session" });
+  if (!(await newSession.isVisible())) await page.getByRole("button", { name: "Open sidebar" }).click();
+  await page.getByRole("button", { name: "New session" }).click();
+  await page.getByRole("button", { name: "Choose workspace folder" }).click();
+  await expect(page.getByLabel("Workspace directory")).toHaveValue(process.cwd());
+  await page.screenshot({ path: `docs/qa/piui/folder-picker-${testInfo.project.name}.png`, fullPage: false });
+  await page.getByRole("button", { name: "Close workspace dialog" }).click();
+
   const composer = page.getByLabel("Message PI");
   await composer.fill("PIUI textbox QA");
   await expect(composer).toHaveValue("PIUI textbox QA");

@@ -33,9 +33,13 @@ export default function App() {
   const openSettings = (tab: SettingsTab) => setSettingsTab(tab);
   const rename = () => setShowRename(true);
   const updateBusyMode = (mode:"steer"|"followUp") => { setBusyMode(mode); localStorage.setItem("piui-busy-mode",mode); };
+  const openStartDialog = (value: { session?: SessionItem }) => {
+    setStartDialog(value);
+    if (window.matchMedia("(max-width: 900px)").matches) setSidebarCollapsed(true);
+  };
 
   return <div className="app-shell">
-    <Sidebar sessions={piui.catalog.sessions} currentFile={piui.rpcState?.sessionFile} openSession={(session) => setStartDialog({session})} newSession={() => setStartDialog({})} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed}/>
+    <Sidebar sessions={piui.catalog.sessions} currentFile={piui.rpcState?.sessionFile} openSession={(session) => openStartDialog({session})} newSession={() => openStartDialog({})} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed}/>
     {!sidebarCollapsed && <button className="sidebar-scrim" onClick={()=>setSidebarCollapsed(true)} aria-label="Close sidebar"/>}
     <section className="workspace-shell">
       <Topbar state={piui.rpcState} runtime={piui.runtime} ready={piui.ready} thinkingLevels={piui.thinkingLevels} onShowModels={()=>setShowModelPicker(true)} onThinking={(level)=>piui.command({type:"set_thinking_level",level})} onRename={rename} onClone={()=>piui.command({type:"clone"})} onShowExtensions={()=>openSettings("extensions")} onShowSettings={()=>openSettings("general")} onShowDetails={()=>setShowDetails(true)}/>

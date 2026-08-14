@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer, WebSocket } from "ws";
 import { listExtensions, listSessions, sessionWorkspace, validateSessionPath, validateWorkspace } from "./catalog.js";
+import { chooseWorkspaceFolder } from "./folder-picker.js";
 import { PiProcess } from "./pi-process.js";
 import { isBrowserMessage, type ServerEnvelope } from "./protocol.js";
 
@@ -37,6 +38,8 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
   const initialCwd = await validateWorkspace(options.cwd ?? process.cwd());
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), "..", "web");
   const sessionToken = crypto.randomBytes(32).toString("base64url");
+  const originHost = host === "::1" ? "[::1]" : host;
+  const expectedOrigins = [`http://${originHost}:${port}`, `http://localhost:${port}`, ...(process.env.PIUI_DEV === "1" ? ["http://127.0.0.1:5173", "http://localhost:5173"] : [])];
   const app = express();
   app.disable("x-powered-by");
   app.use((req, res, next) => {
@@ -50,6 +53,18 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
     next();
   });
   app.get("/api/bootstrap", (_req, res) => res.json({ cwd: initialCwd, piuiVersion: "0.1.0" }));
+  app.post("/api/folder-picker", async (req, res) => {
+    const authorized = parseCookies(req.headers.cookie).piui_session === sessionToken;
+    const origin = req.get("origin");
+    if (!authorized || !origin || !expectedOrigins.includes(origin)) return res.status(403).json({ error: "Same-origin PIUI session required" });
+    try {
+      const selected = await chooseWorkspaceFolder();
+      if (!selected) return res.json({ path: null });
+      return res.json({ path: await validateWorkspace(selected) });
+    } catch (error) {
+      return res.status(500).json({ error: messageOf(error) });
+    }
+  });
   if (existsSync(webRoot)) app.use(express.static(webRoot, { index: false }));
   app.get("/{*splat}", (_req, res) => res.sendFile(join(webRoot, "index.html")));
 
@@ -124,8 +139,6 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 });
   server.on("upgrade", (req, socket, head) => {
     const origin = req.headers.origin;
-    const originHost = host === "::1" ? "[::1]" : host;
-    const expectedOrigins = [`http://${originHost}:${port}`, `http://localhost:${port}`, ...(process.env.PIUI_DEV === "1" ? ["http://127.0.0.1:5173", "http://localhost:5173"] : [])];
     const authorized = parseCookies(req.headers.cookie).piui_session === sessionToken;
     if (req.url !== "/api/ws" || !authorized || !origin || !expectedOrigins.includes(origin)) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
