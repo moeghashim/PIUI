@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Composer, Conversation, ExtensionDialog, Sidebar, StartDialog, Toasts, Topbar, ViewTabs } from "./components";
+import { Composer, ContextRail, Conversation, ExtensionDialog, Sidebar, StartDialog, Toasts, Topbar, ViewTabs } from "./components";
 import { ModelPicker, RenameDialog, SessionDetails, SettingsDialog, type SettingsTab, type ThemeChoice } from "./surfaces";
 import { usePiui } from "./use-piui";
 import type { SessionItem } from "./types";
 
 export default function App() {
   const piui = usePiui();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth <= 650);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth <= 900);
   const [startDialog, setStartDialog] = useState<{ session?: SessionItem }>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>();
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -20,7 +20,7 @@ export default function App() {
     localStorage.setItem("piui-theme",theme);
   }, [theme]);
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 650px)");
+    const media = window.matchMedia("(max-width: 900px)");
     const change = () => setSidebarCollapsed(media.matches);
     media.addEventListener("change",change);
     return () => media.removeEventListener("change",change);
@@ -43,6 +43,16 @@ export default function App() {
       <Conversation messages={piui.conversation.messages} streaming={piui.conversation.streaming} tools={piui.conversation.tools} ready={piui.ready} emptyAction={()=>piui.catalog.cwd && setStartDialog({})}/>
       <Composer running={piui.ready} settled={piui.conversation.settled} commands={piui.commands} statuses={piui.statuses} widgets={piui.widgets} stats={piui.stats} injection={piui.editorInjection} clearInjection={()=>piui.setEditorInjection(undefined)} queueMode={busyMode} onQueueMode={updateBusyMode} onSubmit={(message,behavior,images)=>piui.command({type:"prompt",message,...(images?.length?{images}:{}),...(behavior?{streamingBehavior:behavior}:{})})} onAbort={()=>piui.command({type:"abort"})}/>
     </section>
+    <ContextRail
+      state={piui.rpcState}
+      runtime={piui.runtime}
+      ready={piui.ready}
+      stats={piui.stats}
+      extensionCount={piui.catalog.extensions.length}
+      commandCount={piui.commands.length}
+      onOpenDetails={()=>setShowDetails(true)}
+      onOpenExtensions={()=>openSettings("extensions")}
+    />
     {!piui.connected && <div className="connection-banner">Reconnecting to PIUI…</div>}
     {startDialog && <StartDialog initialCwd={startDialog.session?.cwd ?? piui.catalog.cwd} session={startDialog.session} close={()=>setStartDialog(undefined)} start={launch}/>}
     {piui.dialog && <ExtensionDialog request={piui.dialog} respond={piui.respondToDialog}/>}

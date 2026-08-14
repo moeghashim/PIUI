@@ -84,6 +84,12 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
   await page.getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Extension confirmed: yes", { exact: false }).last()).toBeVisible();
   await page.screenshot({ path: `docs/qa/piui/complete-${testInfo.project.name}.png`, fullPage: false });
+  await page.getByTitle("Settings").click();
+  const finalSettings = page.getByRole("dialog", { name: "Settings" });
+  await finalSettings.getByRole("button", { name: "General" }).click();
+  await finalSettings.getByRole("button", { name: "dark" }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.screenshot({ path: `docs/qa/piui/codex-dark-${testInfo.project.name}.png`, fullPage: false });
 });
 
 test("shell fits the viewport and has no serious accessibility violations", async ({ page }) => {
@@ -97,6 +103,12 @@ test("shell fits the viewport and has no serious accessibility violations", asyn
   expect(fit.width).toBe(0);
   expect(fit.height).toBe(0);
   expect(fit.conversation?.bottom).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
+  const visibleTopbarControls = await page.locator(".topbar button, .topbar select").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()).filter((rect) => rect.width > 0 && rect.height > 0));
+  const viewport = page.viewportSize();
+  for (const rect of visibleTopbarControls) {
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(viewport?.width ?? 0);
+  }
 
   const results = await new AxeBuilder({ page }).analyze();
   const serious = results.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""));

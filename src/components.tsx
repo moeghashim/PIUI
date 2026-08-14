@@ -58,6 +58,36 @@ export function ViewTabs({ entryCount, onShowTrajectory }: { entryCount: number;
   </nav>;
 }
 
+export function ContextRail({ state, runtime, ready, stats, extensionCount, commandCount, onOpenDetails, onOpenExtensions }: {
+  state: RpcState | undefined;
+  runtime: Record<string, unknown>;
+  ready: boolean;
+  stats: Record<string, unknown>;
+  extensionCount: number;
+  commandCount: number;
+  onOpenDetails: () => void;
+  onOpenExtensions: () => void;
+}) {
+  const tokens = stats.tokens as Record<string, number> | undefined;
+  const runtimeLabel = ready ? "Runtime active" : runtime.status === "stopped" ? "Runtime stopped" : "Runtime starting";
+  return <aside className="context-rail" aria-label="Session context">
+    <div className="context-rail-card">
+      <header><div><span>Environment</span><strong>{state?.sessionName || "PI session"}</strong></div><button className="icon-button" onClick={onOpenDetails} aria-label="Open session details"><Activity/></button></header>
+      <section>
+        <h3>Session</h3>
+        <button className="context-row" onClick={onOpenDetails}><Activity/><span><strong>{runtimeLabel}</strong><small>{String(runtime.cwd ?? "Local workspace")}</small></span><ChevronRight/></button>
+        <button className="context-row" onClick={onOpenDetails}><Sparkles/><span><strong>{state?.model?.name ?? state?.model?.id ?? "Loading model"}</strong><small>{state?.thinkingLevel ?? "thinking"} · {formatStat(Number(tokens?.total ?? 0))} tokens</small></span><ChevronRight/></button>
+      </section>
+      <section>
+        <h3>Capabilities</h3>
+        <button className="context-row" onClick={onOpenExtensions}><Package/><span><strong>{extensionCount} extensions</strong><small>{commandCount} commands available</small></span><ChevronRight/></button>
+        <button className="context-row" onClick={onOpenDetails}><ShieldCheck/><span><strong>{runtime.trust ? "Project trusted" : "User extensions only"}</strong><small>{runtime.trust ? "Workspace resources enabled" : "Project resources disabled"}</small></span><ChevronRight/></button>
+      </section>
+      <footer><span className={`health ${ready ? "ok" : runtime.status === "stopped" ? "" : "starting"}`}/><span>{ready ? "Connected to local PI" : runtime.status === "stopped" ? "PI runtime stopped" : "Connecting to PI"}</span></footer>
+    </div>
+  </aside>;
+}
+
 export function Conversation({ messages, streaming, tools, ready, emptyAction }: { messages: AgentMessage[]; streaming: AgentMessage | undefined; tools: Record<string, ToolExecution>; ready: boolean; emptyAction: () => void }) {
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
