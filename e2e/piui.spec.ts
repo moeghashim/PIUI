@@ -6,6 +6,11 @@ async function waitForReady(page: import("@playwright/test").Page) {
   await expect(page.getByRole("button", { name: /Choose model, current/ })).toBeEnabled();
 }
 
+async function expectComfortableSearch(locator: import("@playwright/test").Locator) {
+  const height = await locator.evaluate((element) => element.closest(".search")?.getBoundingClientRect().height ?? 0);
+  expect(height).toBeGreaterThanOrEqual(42);
+}
+
 test("runs the complete PIUI workflow and survives reload", async ({ page }, testInfo) => {
   page.on("pageerror", (error) => console.error("Browser page error:", error));
   await page.goto("/");
@@ -33,6 +38,10 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
 
   await page.getByRole("button", { name: /Choose model, current PI Test/ }).click();
   await expect(page.getByRole("heading", { name: "Choose a model" })).toBeVisible();
+  await expectComfortableSearch(page.getByLabel("Search models"));
+  await expect(page.getByText("3 selectable models from 2 providers.")).toBeVisible();
+  await expect(page.locator(".provider-heading").getByText("anthropic", { exact: true })).toBeVisible();
+  await page.screenshot({ path: `docs/qa/piui/model-picker-${testInfo.project.name}.png`, fullPage: false });
   await page.getByLabel("Search models").fill("alternate");
   await page.getByRole("button", { name: /PI Alternate/ }).click();
   await expect(page.getByRole("button", { name: /Choose model, current PI Alternate/ })).toBeVisible();
@@ -63,6 +72,7 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
   await page.getByRole("button", { name: /Trajectory/ }).click();
   await expect(page.getByRole("heading", { name: "Details" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Session ledger" })).toBeVisible();
+  await expectComfortableSearch(page.getByLabel("Search session events"));
   await page.getByRole("button", { name: "Close session details" }).click();
 
   await page.getByTitle("Settings").click();
@@ -70,6 +80,7 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
   await expect(page.getByRole("heading", { name: "Extensions" })).toBeVisible();
   await expect(page.getByText("configured sources")).toBeVisible();
   await expect(page.getByText("Terminal-only custom components", { exact: false })).toBeVisible();
+  await expectComfortableSearch(page.getByLabel("Search extensions"));
   await page.screenshot({ path: `docs/qa/piui/extensions-${testInfo.project.name}.png`, fullPage: false });
   const settings = page.getByRole("dialog", { name: "Settings" });
   await settings.getByRole("button", { name: "General" }).click();
@@ -103,6 +114,7 @@ test("runs the complete PIUI workflow and survives reload", async ({ page }, tes
 test("shell fits the viewport and has no serious accessibility violations", async ({ page }) => {
   await page.goto("/");
   await waitForReady(page);
+  for (const search of await page.locator(".search:visible").all()) await expectComfortableSearch(search);
   const fit = await page.evaluate(() => ({
     width: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     height: document.documentElement.scrollHeight - document.documentElement.clientHeight,

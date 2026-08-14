@@ -21,6 +21,7 @@ const state = {
 const models = [
   state.model,
   { provider: "fake", id: "pi-alternate", name: "PI Alternate", reasoning: false, contextWindow: 16000, maxTokens: 2048 },
+  { provider: "anthropic", id: "claude-fixture", name: "Claude Fixture", reasoning: true, contextWindow: 200000, maxTokens: 8192 },
 ];
 const messages = [];
 let buffer = "";
