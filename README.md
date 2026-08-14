@@ -2,18 +2,20 @@
 
 PIUI is a local-first web UI harness for the [PI coding agent](https://github.com/earendil-works/pi). It takes the core product ideas from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)—workspace sessions, streamed agent chat, tools, models, and an extensible runtime—and maps DeepSeek “plugins” to PI's native **extensions**.
 
-![PIUI interface](docs/piui-desktop.png)
+![PIUI interface](docs/qa/piui/03-real-response.png)
 
 ## What works
 
 - Persistent PI sessions: create, resume, search, rename, and clone
 - Streaming text and reasoning, Markdown, images, tool calls, and tool results
 - Steer and follow-up queues, plus abort
-- Model and thinking-level selection using your existing PI configuration
+- Searchable model picker and model-dependent thinking levels using your existing PI configuration
 - Slash-command discovery for extensions, skills, and prompt templates
+- Image attachments, context compaction, retry controls, HTML export, session metrics, and a searchable trajectory ledger
 - PI extension UI over RPC: select, confirm, input, editor, notifications, status, text widgets, title, and editor-text updates
-- Read-only extension inventory, including packages and top-level extension files
+- Read-only configured extension inventory, including packages and top-level extension files
 - Explicit project trust before PI loads project-local extensions
+- Responsive light, dark, and system themes with accessible native dialogs
 
 PIUI deliberately uses PI's documented RPC mode. It does not scrape the terminal UI or recreate DeepSeek Harness's Cordis framework.
 
@@ -105,6 +107,8 @@ npm run test:e2e
 ```
 
 `npm run test:real` runs an opt-in smoke against the installed/authenticated PI runtime. The default test suite uses a deterministic fake RPC process and does not spend model tokens.
+
+The current reference comparison, browser evidence, resolved findings, and testing limits are recorded in [`docs/qa/AUDIT.md`](docs/qa/AUDIT.md).
 
 ## Upstream references
 

@@ -73,6 +73,9 @@ export interface RpcState {
   messageCount: number;
   pendingMessageCount: number;
   autoCompactionEnabled: boolean;
+  autoRetryEnabled?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
 }
 
 export interface ToolExecution {
@@ -99,4 +102,5 @@ export interface ExtensionUiRequest {
   widgetPlacement?: string;
   notifyType?: string;
   text?: string;
+  timeout?: number;
 }

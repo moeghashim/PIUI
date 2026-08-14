@@ -25,7 +25,7 @@ export type BrowserMessage =
   | { kind: "refresh_catalog"; cwd?: string };
 
 export interface ServerEnvelope {
-  kind: "pi" | "runtime" | "catalog" | "server_error";
+  kind: "pi" | "runtime" | "catalog" | "diagnostic" | "server_error";
   payload: unknown;
 }
 

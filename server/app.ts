@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer, WebSocket } from "ws";
-import { listExtensions, listSessions, validateSessionPath, validateWorkspace } from "./catalog.js";
+import { listExtensions, listSessions, sessionWorkspace, validateSessionPath, validateWorkspace } from "./catalog.js";
 import { PiProcess } from "./pi-process.js";
 import { isBrowserMessage, type ServerEnvelope } from "./protocol.js";
 
@@ -15,6 +15,16 @@ export interface PiuiServerOptions {
   cwd?: string;
   webRoot?: string;
 }
+
+const HYDRATION_COMMANDS = [
+  "get_state",
+  "get_messages",
+  "get_available_models",
+  "get_available_thinking_levels",
+  "get_commands",
+  "get_session_stats",
+  "get_entries",
+] as const;
 
 function parseCookies(value: string | undefined) {
   return Object.fromEntries((value ?? "").split(";").map((item) => item.trim().split("=").map(decodeURIComponent)).filter((parts) => parts.length === 2) as Array<[string, string]>);
@@ -47,6 +57,10 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
   const clients = new Set<WebSocket>();
   let runtime: PiProcess | undefined;
   let runtimeInfo: { cwd: string; trust: boolean; sessionPath?: string } | undefined;
+  let runtimeGeneration = 0;
+  let automaticStart: Promise<void> | undefined;
+  const runtimeSnapshot = new Map<string, unknown>();
+  const extensionReplay = new Map<string, unknown>();
 
   const send = (socket: WebSocket, message: ServerEnvelope) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -59,6 +73,53 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
     sessions: await listSessions(),
     extensions: await listExtensions(cwd, trusted),
   });
+
+  const hydrateRuntime = () => {
+    if (!runtime) return;
+    for (const type of HYDRATION_COMMANDS) runtime.send({ type });
+  };
+
+  const startRuntime = async (cwd: string, trust: boolean, sessionPath?: string) => {
+    await runtime?.stop();
+    const generation = ++runtimeGeneration;
+    runtimeInfo = { cwd, trust, ...(sessionPath ? { sessionPath } : {}) };
+    runtimeSnapshot.clear();
+    extensionReplay.clear();
+    const nextRuntime = new PiProcess(runtimeInfo);
+    runtime = nextRuntime;
+    nextRuntime.on("event", (payload) => {
+      if (payload && typeof payload === "object") {
+        const event = payload as Record<string, unknown>;
+        if (event.type === "response" && typeof event.command === "string" && HYDRATION_COMMANDS.includes(event.command as typeof HYDRATION_COMMANDS[number])) {
+          runtimeSnapshot.set(event.command, payload);
+        }
+        if (event.type === "extension_ui_request" && typeof event.method === "string") {
+          const key = extensionReplayKey(event);
+          if (key) extensionReplay.set(key, payload);
+        }
+        if (event.type === "agent_settled") {
+          for (const type of ["get_state", "get_messages", "get_session_stats", "get_entries"] as const) nextRuntime.send({ type });
+          void catalog(cwd, trust).then((payload) => broadcast({ kind: "catalog", payload }));
+        }
+      }
+      broadcast({ kind: "pi", payload });
+    });
+    nextRuntime.on("stderr", (text) => broadcast({ kind: "diagnostic", payload: sanitizeDiagnostic(text) }));
+    nextRuntime.on("exit", (code, signal) => {
+      if (generation !== runtimeGeneration) return;
+      broadcast({ kind: "runtime", payload: { status: "stopped", code, signal, ...runtimeInfo } });
+      runtime = undefined;
+    });
+    broadcast({ kind: "runtime", payload: { status: "running", pid: nextRuntime.pid, ...runtimeInfo } });
+    hydrateRuntime();
+    broadcast({ kind: "catalog", payload: await catalog(cwd, trust) });
+  };
+
+  const ensureRuntime = () => {
+    if (runtime) return Promise.resolve();
+    automaticStart ??= startRuntime(initialCwd, false).finally(() => { automaticStart = undefined; });
+    return automaticStart;
+  };
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 });
   server.on("upgrade", (req, socket, head) => {
@@ -77,27 +138,32 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
   wss.on("connection", (socket) => {
     clients.add(socket);
     void catalog().then((payload) => send(socket, { kind: "catalog", payload })).catch((error) => send(socket, { kind: "server_error", payload: messageOf(error) }));
-    send(socket, { kind: "runtime", payload: runtime ? { status: "running", pid: runtime.pid, ...runtimeInfo } : { status: "stopped" } });
+    if (runtime) {
+      send(socket, { kind: "runtime", payload: { status: "running", pid: runtime.pid, ...runtimeInfo } });
+      for (const payload of runtimeSnapshot.values()) send(socket, { kind: "pi", payload });
+      for (const payload of extensionReplay.values()) send(socket, { kind: "pi", payload });
+      if (runtimeSnapshot.size < HYDRATION_COMMANDS.length) hydrateRuntime();
+    } else {
+      send(socket, { kind: "runtime", payload: { status: "starting", cwd: initialCwd, trust: false } });
+      void ensureRuntime().catch((error) => {
+        send(socket, { kind: "server_error", payload: messageOf(error) });
+        broadcast({ kind: "runtime", payload: { status: "stopped", cwd: initialCwd, trust: false } });
+      });
+    }
     socket.on("close", () => clients.delete(socket));
     socket.on("message", (data) => void (async () => {
       try {
         const message = JSON.parse(data.toString()) as unknown;
         if (!isBrowserMessage(message)) throw new Error("Invalid browser message");
         if (message.kind === "start") {
+          await automaticStart;
           const cwd = await validateWorkspace(message.cwd);
           const sessionPath = message.sessionPath ? await validateSessionPath(message.sessionPath) : undefined;
-          await runtime?.stop();
-          runtimeInfo = { cwd, trust: message.trust, ...(sessionPath ? { sessionPath } : {}) };
-          runtime = new PiProcess(runtimeInfo);
-          runtime.on("event", (payload) => broadcast({ kind: "pi", payload }));
-          runtime.on("stderr", (text) => broadcast({ kind: "runtime", payload: { status: "diagnostic", text: sanitizeDiagnostic(text) } }));
-          runtime.on("exit", (code, signal) => {
-            broadcast({ kind: "runtime", payload: { status: "stopped", code, signal } });
-            runtime = undefined;
-          });
-          broadcast({ kind: "runtime", payload: { status: "running", pid: runtime.pid, ...runtimeInfo } });
-          for (const type of ["get_state", "get_messages", "get_available_models", "get_available_thinking_levels", "get_commands", "get_session_stats", "get_entries"]) runtime.send({ type });
-          broadcast({ kind: "catalog", payload: await catalog(cwd, message.trust) });
+          if (sessionPath) {
+            const authoritativeCwd = await sessionWorkspace(sessionPath);
+            if (authoritativeCwd !== cwd) throw new Error("Saved sessions must resume in their original workspace");
+          }
+          await startRuntime(cwd, message.trust, sessionPath);
         } else if (message.kind === "command") {
           if (!runtime) throw new Error("Start a PI session first");
           runtime.send(message.command);
@@ -105,8 +171,10 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
           if (!runtime) throw new Error("PI is not running");
           runtime.respond(message.response);
         } else if (message.kind === "stop_runtime") {
+          runtimeGeneration += 1;
           await runtime?.stop();
           runtime = undefined;
+          broadcast({ kind: "runtime", payload: { status: "stopped", ...runtimeInfo } });
         } else {
           const cwd = message.cwd ? await validateWorkspace(message.cwd) : runtimeInfo?.cwd ?? initialCwd;
           broadcast({ kind: "catalog", payload: await catalog(cwd) });
@@ -134,6 +202,14 @@ export async function createPiuiServer(options: PiuiServerOptions = {}) {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     },
   };
+}
+
+function extensionReplayKey(event: Record<string, unknown>): string | undefined {
+  if (event.method === "setStatus" && typeof event.statusKey === "string") return `status:${event.statusKey}`;
+  if (event.method === "setWidget" && typeof event.widgetKey === "string") return `widget:${event.widgetKey}`;
+  if (event.method === "setTitle") return "title";
+  if (event.method === "set_editor_text") return "editor";
+  return undefined;
 }
 
 function messageOf(error: unknown) {

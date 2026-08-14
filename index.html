@@ -7,22 +7,16 @@
     <title>PIUI</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script>
-      if (window.location.protocol === "file:") {
-        document.documentElement.style.background = "#11100f";
-        document.documentElement.style.color = "#f4efe8";
-        document.getElementById("root").innerHTML = `
-          <main style="max-width:680px;margin:12vh auto;padding:32px;font:16px/1.6 ui-sans-serif,system-ui,sans-serif">
-            <p style="color:#db9f67;text-transform:uppercase;letter-spacing:.12em;font-size:12px">PIUI launcher</p>
-            <h1 style="font-size:36px;line-height:1.15;margin:8px 0 16px">PIUI needs its local server</h1>
-            <p style="color:#bdb7ae">The browser cannot run PIUI directly from <code>file://</code> because the interface connects to the locally installed PI agent.</p>
-            <p>Double-click <strong>Start PIUI.command</strong> in this folder, or run:</p>
-            <pre style="padding:16px;border:1px solid #393633;border-radius:10px;background:#191817;overflow:auto"><code>npm run build\nnpm start</code></pre>
-            <p>Once it is running, open <a href="http://127.0.0.1:31415" style="color:#f0ad72">http://127.0.0.1:31415</a>.</p>
-          </main>`;
-      }
-    </script>
+    <div id="root">
+      <main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#0b0d12;color:#f4f6fb;font:16px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+        <section style="width:min(560px,100%);padding:32px;border:1px solid #2a2f3a;border-radius:20px;background:#11141b;box-shadow:0 24px 80px #0008">
+          <p style="margin:0 0 8px;color:#9aa4b5;font-size:13px;letter-spacing:.12em;text-transform:uppercase">PIUI</p>
+          <h1 style="margin:0 0 12px;font-size:28px">Start the local server first</h1>
+          <p style="margin:0 0 18px;color:#b8c0ce">PIUI connects to your locally installed PI process, so it cannot run directly from a <code>file://</code> page.</p>
+          <p style="margin:0;color:#dbe1ea">Double-click <strong>Start PIUI.command</strong> in this folder, then open the address shown in Terminal.</p>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

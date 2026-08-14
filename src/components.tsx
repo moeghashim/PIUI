@@ -1,57 +1,69 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  AlertTriangle, Bot, Box, Brain, Check, ChevronDown, ChevronRight, CircleStop, Copy, FileCode2,
-  Folder, GitFork, LoaderCircle, MessageSquarePlus, Package, PanelLeftClose, Play, Plus, RefreshCw,
+  Activity, AlertTriangle, Bot, Box, Brain, Check, ChevronDown, ChevronRight, CircleStop, Command, Copy, FileCode2,
+  Folder, GitFork, LoaderCircle, MessageSquarePlus, Package, PanelLeftClose, PanelRightOpen, Paperclip, Play, Plus, RefreshCw,
   Search, Send, Settings2, ShieldCheck, Sparkles, SquareTerminal, Wrench, X,
 } from "lucide-react";
-import type { AgentMessage, ExtensionItem, ExtensionUiRequest, ModelInfo, RpcState, SessionItem, SlashCommand, ToolExecution } from "./types";
+import type { AgentMessage, ExtensionItem, ExtensionUiRequest, RpcState, SessionItem, SlashCommand, ToolExecution } from "./types";
+import { ModalSurface } from "./surfaces";
 
 export function Sidebar({ sessions, currentFile, openSession, newSession, collapsed, setCollapsed }: {
   sessions: SessionItem[]; currentFile: string | undefined; openSession: (session: SessionItem) => void; newSession: () => void; collapsed: boolean; setCollapsed: (value: boolean) => void;
 }) {
   const [search, setSearch] = useState("");
   const filtered = sessions.filter((session) => `${session.name ?? ""} ${session.firstMessage} ${session.cwd}`.toLowerCase().includes(search.toLowerCase())).slice(0, 80);
+  const workspaces = useMemo(() => {
+    const groups = new Map<string, SessionItem[]>();
+    for (const session of filtered) groups.set(session.cwd, [...(groups.get(session.cwd) ?? []), session]);
+    return [...groups.entries()];
+  }, [filtered]);
   if (collapsed) return <button className="sidebar-rail" onClick={() => setCollapsed(false)} aria-label="Open sidebar"><PanelLeftClose /></button>;
   return <aside className="sidebar" data-testid="sidebar">
     <div className="brand"><div className="pi-mark">π</div><div><strong>PIUI</strong><span>agent harness</span></div><button className="icon-button" onClick={() => setCollapsed(true)} aria-label="Collapse sidebar"><PanelLeftClose /></button></div>
     <button className="new-session" onClick={newSession}><MessageSquarePlus size={17} /> New session</button>
     <label className="search"><Search size={15}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search sessions" aria-label="Search sessions"/></label>
     <div className="session-list">
-      <div className="section-label">RECENT</div>
-      {filtered.map((session) => <button key={session.path} className={`session-row ${currentFile === session.path ? "active" : ""}`} onClick={() => openSession(session)}>
-        <span className="session-icon"><Bot size={16}/></span><span className="session-copy"><strong>{session.name || session.firstMessage || "Untitled session"}</strong><small>{shortPath(session.cwd)} · {relativeTime(session.modified)}</small></span>
-      </button>)}
+      <div className="section-label">WORKSPACES</div>
+      {workspaces.map(([cwd, items]) => <section className="workspace-group" key={cwd}><div className="workspace-heading"><Folder/><strong>{shortPath(cwd)}</strong><span>{items.length}</span></div>{items.map((session) => <button key={session.path} className={`session-row ${currentFile === session.path ? "active" : ""}`} onClick={() => openSession(session)}>
+        <span className="session-icon"><Bot size={16}/></span><span className="session-copy"><strong>{session.name || session.firstMessage || "Untitled session"}</strong><small>{relativeTime(session.modified)} · {session.messageCount} messages</small></span>
+      </button>)}</section>)}
       {!filtered.length && <div className="empty-list">No matching sessions</div>}
     </div>
   </aside>;
 }
 
-export function Topbar({ state, runtime, models, thinkingLevels, onModel, onThinking, onRename, onClone, onShowExtensions }: {
-  state: RpcState | undefined; runtime: Record<string, unknown>; models: ModelInfo[]; thinkingLevels: string[]; onModel: (provider: string, id: string) => void; onThinking: (level: string) => void; onRename: () => void; onClone: () => void; onShowExtensions: () => void;
+export function Topbar({ state, runtime, ready, thinkingLevels, onShowModels, onThinking, onRename, onClone, onShowExtensions, onShowSettings, onShowDetails }: {
+  state: RpcState | undefined; runtime: Record<string, unknown>; ready: boolean; thinkingLevels: string[]; onShowModels: () => void; onThinking: (level: string) => void; onRename: () => void; onClone: () => void; onShowExtensions: () => void; onShowSettings: () => void; onShowDetails: () => void;
 }) {
-  const currentModel = state?.model ? `${state.model.provider}/${state.model.id}` : "Choose model";
   return <header className="topbar">
-    <div className="session-title"><span className={`health ${runtime.status === "running" ? "ok" : ""}`}/><div><strong>{state?.sessionName || "PI session"}</strong><small>{runtime.status === "running" ? String(runtime.cwd ?? "") : "Runtime stopped"}</small></div></div>
+    <div className="session-title"><span className={`health ${ready ? "ok" : runtime.status === "starting" || runtime.status === "running" ? "starting" : ""}`}/><div><strong>{state?.sessionName || "PI session"}</strong><small>{ready ? String(runtime.cwd ?? "") : runtime.status === "stopped" ? "Runtime stopped" : "Starting PI…"}</small></div></div>
     <div className="topbar-actions">
-      <label className="select-control"><Sparkles size={15}/><select value={currentModel} onChange={(event) => { const index = event.target.value.indexOf("/"); onModel(event.target.value.slice(0,index), event.target.value.slice(index+1)); }} aria-label="Model">
-        {!state?.model && <option>Choose model</option>}{models.map((model) => <option key={`${model.provider}/${model.id}`} value={`${model.provider}/${model.id}`}>{model.name ?? model.id} · {model.provider}</option>)}
-      </select></label>
-      <label className="select-control compact"><Brain size={15}/><select value={state?.thinkingLevel ?? "off"} onChange={(event) => onThinking(event.target.value)} aria-label="Thinking level">{thinkingLevels.map((level) => <option key={level}>{level}</option>)}</select></label>
-      <button className="icon-button" onClick={onClone} title="Clone session"><GitFork/></button>
-      <button className="icon-button" onClick={onRename} title="Rename session"><FileCode2/></button>
-      <button className="icon-button" onClick={onShowExtensions} title="Extensions"><Package/></button>
+      <button className="model-trigger" onClick={onShowModels} disabled={!ready} aria-label={`Choose model${state?.model ? `, current ${state.model.name ?? state.model.id}` : ""}`}><Sparkles/><span><strong>{state?.model?.name ?? state?.model?.id ?? "Loading models…"}</strong><small>{state?.model?.provider ?? "PI runtime"}</small></span><ChevronDown/></button>
+      <label className="select-control compact"><Brain size={15}/><select disabled={!ready} value={state?.thinkingLevel ?? "off"} onChange={(event) => onThinking(event.target.value)} aria-label="Thinking level">{thinkingLevels.map((level) => <option key={level}>{level}</option>)}</select></label>
+      <button className="icon-button" disabled={!ready} onClick={onClone} title="Clone session" aria-label="Clone session"><GitFork/></button>
+      <button className="icon-button" disabled={!ready} onClick={onRename} title="Rename session" aria-label="Rename session"><FileCode2/></button>
+      <button className="icon-button" onClick={onShowDetails} title="Session details" aria-label="Session details"><PanelRightOpen/></button>
+      <button className="icon-button" onClick={onShowExtensions} title="Extensions" aria-label="Extensions"><Package/></button>
+      <button className="icon-button" onClick={onShowSettings} title="Settings" aria-label="Settings"><Settings2/></button>
     </div>
   </header>;
 }
 
-export function Conversation({ messages, streaming, tools, emptyAction }: { messages: AgentMessage[]; streaming: AgentMessage | undefined; tools: Record<string, ToolExecution>; emptyAction: () => void }) {
+export function ViewTabs({ entryCount, onShowTrajectory }: { entryCount: number; onShowTrajectory: () => void }) {
+  return <nav className="view-tabs" aria-label="Session views">
+    <button className="active" aria-current="page"><MessageSquarePlus/>Chat</button>
+    <button onClick={onShowTrajectory}><Activity/>Trajectory<span>{entryCount}</span></button>
+  </nav>;
+}
+
+export function Conversation({ messages, streaming, tools, ready, emptyAction }: { messages: AgentMessage[]; streaming: AgentMessage | undefined; tools: Record<string, ToolExecution>; ready: boolean; emptyAction: () => void }) {
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
-  if (!messages.length && !streaming) return <main className="conversation empty-conversation" data-testid="conversation"><div className="empty-orbit"><div className="pi-hero">π</div></div><h1>What should PI build?</h1><p>Run a coding agent in any local workspace, with native tools, sessions, and extensions.</p><button className="primary" onClick={emptyAction}><Play size={16}/> Start a session</button></main>;
+  if (!messages.length && !streaming) return <main className="conversation empty-conversation" data-testid="conversation"><div className="empty-orbit"><div className="pi-hero">π</div></div><h1>{ready ? "What should PI build?" : "Starting PI…"}</h1><p>{ready ? "Describe a task below. PI can use native tools, sessions, skills, and extensions in this workspace." : "Loading your models, commands, session history, and extensions."}</p>{!ready && <button className="secondary" onClick={emptyAction}><Folder size={16}/> Choose another workspace</button>}</main>;
   return <main className="conversation" data-testid="conversation"><div className="message-stack">
     {messages.map((message, index) => <MessageView key={`${message.timestamp ?? "m"}-${index}`} message={message} tools={tools}/>) }
     {streaming && <MessageView message={streaming} tools={tools} streaming/>}
@@ -92,40 +104,50 @@ function Thinking({ text }: { text: string }) { const [open, setOpen] = useState
 function ToolCallView({ name, args, execution }: { name: string; args: unknown; execution: ToolExecution | undefined }) { const [open, setOpen] = useState(false); return <div className={`tool-card ${execution?.status ?? "pending"}`}><button onClick={() => setOpen(!open)}><span className="tool-icon"><Wrench/></span><span><strong>{name}</strong><small>{toolSummary(name,args)}</small></span><span className="tool-status">{execution?.status === "running" ? <LoaderCircle className="spin"/> : execution?.status === "error" ? <X/> : <Check/>}</span><ChevronRight className={open ? "rotated" : ""}/></button>{open && <div className="tool-detail"><label>Input</label><pre>{pretty(args)}</pre>{execution?.result !== undefined && <><label>Result</label><pre>{pretty(execution.result)}</pre></>}</div>}</div>; }
 function ToolResult({ message }: { message: AgentMessage }) { return <details className={`tool-result ${message.isError ? "error" : ""}`}><summary><Wrench/> {message.toolName ?? "Tool"} result <span>{message.isError ? "failed" : "completed"}</span></summary><pre>{contentText(message.content)}</pre></details>; }
 
-export function Composer({ running, settled, commands, statuses, widgets, injection, clearInjection, onSubmit, onAbort }: {
-  running: boolean; settled: boolean; commands: SlashCommand[]; statuses: Record<string,string>; widgets: Record<string,string[]>; injection: string | undefined; clearInjection: () => void; onSubmit: (text: string, behavior?: "steer"|"followUp") => void; onAbort: () => void;
+export function Composer({ running, settled, commands, statuses, widgets, stats, injection, clearInjection, onSubmit, onAbort, queueMode: controlledQueueMode, onQueueMode }: {
+  running: boolean; settled: boolean; commands: SlashCommand[]; statuses: Record<string,string>; widgets: Record<string,string[]>; stats: Record<string,unknown>; injection: string | undefined; clearInjection: () => void; onSubmit: (text: string, behavior?: "steer"|"followUp", images?: Array<{type:"image";data:string;mimeType:string}>) => void; onAbort: () => void; queueMode?: "steer"|"followUp"; onQueueMode?: (mode:"steer"|"followUp") => void;
 }) {
   const [text, setText] = useState("");
-  const [queueMode, setQueueMode] = useState<"steer"|"followUp">("steer");
+  const [internalQueueMode, setInternalQueueMode] = useState<"steer"|"followUp">("steer");
+  const [showCommands, setShowCommands] = useState(false);
+  const [attachments, setAttachments] = useState<Array<{name:string;type:"image";data:string;mimeType:string;preview:string}>>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const queueMode = controlledQueueMode ?? internalQueueMode;
+  const setQueueMode = (mode:"steer"|"followUp") => { setInternalQueueMode(mode); onQueueMode?.(mode); };
   useEffect(() => { if (injection !== undefined) { setText(injection); clearInjection(); } }, [injection, clearInjection]);
-  const suggestions = useMemo(() => text.startsWith("/") ? commands.filter((command) => command.name.toLowerCase().includes(text.slice(1).split(/\s/)[0]?.toLowerCase() ?? "")).slice(0,8) : [], [text, commands]);
-  const submit = (event?: FormEvent) => { event?.preventDefault(); const value = text.trim(); if (!value || !running) return; onSubmit(value, settled ? undefined : queueMode); setText(""); };
+  const suggestions = useMemo(() => (text.startsWith("/") || showCommands) ? commands.filter((command) => !text.startsWith("/") || command.name.toLowerCase().includes(text.slice(1).split(/\s/)[0]?.toLowerCase() ?? "")).slice(0,12) : [], [text, commands, showCommands]);
+  const submit = (event?: FormEvent) => { event?.preventDefault(); const value = text.trim(); if ((!value && attachments.length === 0) || !running) return; onSubmit(value || "Describe these images.", settled ? undefined : queueMode, attachments.map(({type,data,mimeType})=>({type,data,mimeType}))); attachments.forEach((item)=>URL.revokeObjectURL(item.preview)); setText(""); setAttachments([]); setShowCommands(false); };
+  const attach = async (event: ChangeEvent<HTMLInputElement>) => { const files = [...(event.target.files ?? [])].filter((file)=>file.type.startsWith("image/")); const items = await Promise.all(files.map(async (file) => ({name:file.name,type:"image" as const,mimeType:file.type,data:await fileBase64(file),preview:URL.createObjectURL(file)}))); setAttachments((current)=>{const combined=[...current,...items];combined.slice(6).forEach((item)=>URL.revokeObjectURL(item.preview));return combined.slice(0,6);}); event.target.value=""; };
   return <div className="composer-wrap">
     {Object.entries(widgets).map(([key, lines]) => <div className="extension-widget" key={key}><Package size={14}/><div>{lines.map((line,index) => <span key={index}>{line}</span>)}</div></div>)}
-    {suggestions.length > 0 && <div className="command-menu">{suggestions.map((command) => <button key={`${command.source}-${command.name}`} onClick={() => setText(`/${command.name} `)}><span className={`command-source ${command.source}`}>/{command.name}</span><small>{command.description}</small><em>{command.source}</em></button>)}</div>}
+    {suggestions.length > 0 && <div className="command-menu" role="listbox" aria-label="Commands">{suggestions.map((command) => <button role="option" key={`${command.source}-${command.name}`} onClick={() => {setText(`/${command.name} `);setShowCommands(false);}}><span className={`command-source ${command.source}`}>/{command.name}</span><small>{command.description}</small><em>{command.source}</em></button>)}</div>}
     <form className="composer" onSubmit={submit}>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={running ? (settled ? "Ask PI to build, inspect, or change something…" : "Steer PI while it works…") : "Start a session to send a message"} disabled={!running} rows={1} aria-label="Message PI"/>
+      {attachments.length > 0 && <div className="attachment-strip">{attachments.map((item,index)=><div key={`${item.name}-${index}`}><img src={item.preview} alt=""/><span>{item.name}</span><button type="button" onClick={()=>setAttachments((items)=>items.filter((candidate,itemIndex)=>{if(itemIndex===index)URL.revokeObjectURL(candidate.preview);return itemIndex!==index;}))} aria-label={`Remove ${item.name}`}><X/></button></div>)}</div>}
+      <textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={running ? (settled ? "Describe what you want PI to build" : "Steer PI while it works…") : "Starting PI and loading models…"} readOnly={!running} rows={1} aria-label="Message PI" aria-busy={!running}/>
       <div className="composer-footer"><div className="status-strip">{Object.entries(statuses).map(([key,value]) => <span key={key}><span className="status-dot"/>{value}</span>)}</div><div className="composer-actions">
+        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(event)=>void attach(event)}/><button type="button" className="composer-tool" onClick={()=>fileInput.current?.click()} disabled={!running} aria-label="Attach images"><Paperclip/></button>
+        <button type="button" className="composer-tool" onClick={()=>setShowCommands((value)=>!value)} disabled={!running || commands.length === 0} aria-label="Commands" aria-expanded={showCommands}><Command/></button>
         {!settled && <select value={queueMode} onChange={(event) => setQueueMode(event.target.value as "steer"|"followUp")} aria-label="Queue mode"><option value="steer">Steer now</option><option value="followUp">Follow up</option></select>}
         {!settled && <button type="button" className="stop" onClick={onAbort} title="Stop"><CircleStop/></button>}
-        <button type="submit" className="send" disabled={!text.trim() || !running} aria-label="Send message"><Send/></button>
+        <button type="submit" className="send" disabled={(!text.trim() && attachments.length === 0) || !running} aria-label="Send message"><Send/></button>
       </div></div>
-    </form><div className="composer-hint">PI and extensions run with your user permissions. Review tool activity before approving sensitive work.</div>
+    </form><div className="session-strip"><span>{String(stats.totalMessages ?? 0)} messages</span><i/><span>{formatStat((stats.tokens as Record<string,number>|undefined)?.total ?? 0)} tokens</span><i/><span>${Number(stats.cost ?? 0).toFixed(4)}</span><i/><span>{commands.length} commands</span></div><div className="composer-hint">PI and extensions run with your user permissions. Review tool activity before approving sensitive work.</div>
   </div>;
 }
 
 export function StartDialog({ initialCwd, session, close, start }: { initialCwd: string; session: SessionItem | undefined; close: () => void; start: (cwd: string, trusted: boolean) => void }) {
   const [cwd, setCwd] = useState(session?.cwd ?? initialCwd);
-  return <div className="modal-backdrop"><div className="modal start-modal" role="dialog" aria-modal="true" aria-labelledby="start-title"><button className="modal-close" onClick={close}><X/></button><div className="modal-icon"><ShieldCheck/></div><h2 id="start-title">{session ? "Resume this session?" : "Open a PI workspace"}</h2><p>PI can read, edit, and run commands in this workspace. Project extensions are code and receive the same permissions.</p><label>Workspace directory<input value={cwd} onChange={(event) => setCwd(event.target.value)} autoFocus/></label><div className="trust-actions"><button className="secondary" onClick={() => start(cwd,false)}><ShieldCheck/> Start without project extensions</button><button className="primary" onClick={() => start(cwd,true)}><Play/> Trust & start</button></div><small>“Without project extensions” still loads your user-level PI extensions and tools.</small></div></div>;
+  const valid = Boolean(cwd.trim());
+  return <ModalSurface className="small-dialog start-modal" labelledBy="start-title" close={close}><button className="modal-close" onClick={close} aria-label="Close workspace dialog"><X/></button><div className="modal-icon"><ShieldCheck/></div><h2 id="start-title">{session ? "Resume this session?" : "Open a PI workspace"}</h2><p>PI can read, edit, and run commands in this workspace. Project extensions are code and receive the same permissions.</p><label>Workspace directory<input value={cwd} readOnly={Boolean(session)} onChange={(event) => setCwd(event.target.value)} autoFocus={!session}/></label>{session && <small className="field-note">Saved sessions always resume in their original workspace.</small>}<div className="trust-actions"><button className="secondary" disabled={!valid} onClick={() => start(cwd,false)}><ShieldCheck/> Start without project extensions</button><button className="primary" disabled={!valid} onClick={() => start(cwd,true)}><Play/> Trust & start</button></div><small>“Without project extensions” still loads your user-level PI extensions and tools.</small></ModalSurface>;
 }
 
 export function ExtensionDialog({ request, respond }: { request: ExtensionUiRequest; respond: (value: Record<string, unknown>) => void }) {
   const [value, setValue] = useState(request.prefill ?? "");
-  return <div className="modal-backdrop"><div className="modal extension-dialog" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => respond({cancelled:true})}><X/></button><div className="eyebrow"><Package/> PI EXTENSION</div><h2>{request.title ?? "Extension input"}</h2>{request.message && <p>{request.message}</p>}
+  return <ModalSurface className="small-dialog extension-dialog" labelledBy="extension-dialog-title" close={() => respond({cancelled:true})}><button className="modal-close" onClick={() => respond({cancelled:true})} aria-label="Cancel extension dialog"><X/></button><div className="eyebrow"><Package/> PI EXTENSION</div><h2 id="extension-dialog-title">{request.title ?? "Extension input"}</h2>{request.message && <p>{request.message}</p>}
     {request.method === "select" && <div className="option-list">{request.options?.map((option) => <button key={option} onClick={() => respond({value:option})}>{option}<ChevronRight/></button>)}</div>}
     {request.method === "confirm" && <div className="modal-actions"><button className="secondary" onClick={() => respond({confirmed:false})}>Cancel</button><button className="primary" onClick={() => respond({confirmed:true})}>Confirm</button></div>}
     {(request.method === "input" || request.method === "editor") && <form onSubmit={(event) => {event.preventDefault();respond({value});}}><textarea value={value} onChange={(event) => setValue(event.target.value)} placeholder={request.placeholder} rows={request.method === "editor" ? 10 : 2} autoFocus/><div className="modal-actions"><button type="button" className="secondary" onClick={() => respond({cancelled:true})}>Cancel</button><button className="primary">Submit</button></div></form>}
-  </div></div>;
+  </ModalSurface>;
 }
 
 export function ExtensionsPanel({ extensions, commands, close, refresh }: { extensions: ExtensionItem[]; commands: SlashCommand[]; close: () => void; refresh: () => void }) {
@@ -141,3 +163,5 @@ function relativeTime(value: string) { const diff = Date.now() - new Date(value)
 function contentText(content: AgentMessage["content"]): string { if(typeof content === "string")return content; if(!Array.isArray(content))return ""; return content.map((part)=>part.type === "text" ? String((part as {text?:string}).text??"") : part.type === "thinking" ? String((part as {thinking?:string}).thinking??"") : "").join("\n"); }
 function pretty(value: unknown) { if(typeof value === "string")return value; try{return JSON.stringify(value,null,2);}catch{return String(value);} }
 function toolSummary(name:string,args:unknown) { if(!args||typeof args!=="object")return ""; const record=args as Record<string,unknown>; return String(record.path??record.command??record.query??record.pattern??Object.keys(record).slice(0,2).join(", ")).slice(0,100); }
+function fileBase64(file: File) { return new Promise<string>((resolve,reject) => { const reader = new FileReader(); reader.onerror=()=>reject(reader.error); reader.onload=()=>resolve(String(reader.result).split(",",2)[1] ?? ""); reader.readAsDataURL(file); }); }
+function formatStat(value: number) { return Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1}).format(value); }

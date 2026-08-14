@@ -21,7 +21,8 @@ export function usePiui() {
   const [thinkingLevels, setThinkingLevels] = useState<string[]>([]);
   const [commands, setCommands] = useState<SlashCommand[]>([]);
   const [stats, setStats] = useState<Record<string, unknown>>({});
-  const [dialog, setDialog] = useState<ExtensionUiRequest>();
+  const [entries, setEntries] = useState<Record<string, unknown>[]>([]);
+  const [dialogs, setDialogs] = useState<ExtensionUiRequest[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [widgets, setWidgets] = useState<Record<string, string[]>>({});
   const [editorInjection, setEditorInjection] = useState<string>();
@@ -49,11 +50,8 @@ export function usePiui() {
       socket.onmessage = (message) => {
         const envelope = JSON.parse(message.data as string) as { kind: string; payload: unknown };
         if (envelope.kind === "catalog") setCatalog(envelope.payload as Catalog);
-        if (envelope.kind === "runtime") {
-          const next = envelope.payload as Record<string, unknown>;
-          setRuntime(next);
-          if (next.status === "diagnostic" && typeof next.text === "string") addToast(next.text.trim(), "warning");
-        }
+        if (envelope.kind === "runtime") setRuntime(envelope.payload as Record<string, unknown>);
+        if (envelope.kind === "diagnostic") addToast(String(envelope.payload).trim(), "warning");
         if (envelope.kind === "server_error") addToast(String(envelope.payload), "error");
         if (envelope.kind === "pi") handlePi(envelope.payload);
       };
@@ -74,17 +72,35 @@ export function usePiui() {
       if (event.command === "get_available_thinking_levels") setThinkingLevels((data?.levels as string[]) ?? []);
       if (event.command === "get_commands") setCommands((data?.commands as SlashCommand[]) ?? []);
       if (event.command === "get_session_stats" && data) setStats(data);
-      if (["set_model", "set_thinking_level", "set_session_name", "new_session", "clone", "fork"].includes(String(event.command)) && event.success === true) command({ type: "get_state" });
+      if (event.command === "get_entries") setEntries((data?.entries as Record<string, unknown>[]) ?? []);
+      if (["set_model", "cycle_model"].includes(String(event.command)) && event.success === true) {
+        command({ type: "get_state" });
+        command({ type: "get_available_thinking_levels" });
+      }
+      if (["set_thinking_level", "set_session_name", "new_session", "clone", "fork", "set_auto_compaction", "set_auto_retry", "compact"].includes(String(event.command)) && event.success === true) {
+        command({ type: "get_state" });
+        command({ type: "get_session_stats" });
+      }
+      if (event.command === "export_html" && event.success === true) addToast(`Session exported to ${String(data?.path ?? "HTML")}`, "success");
       return;
     }
     if (event.type === "thinking_level_changed") setRpcState((state) => state ? { ...state, thinkingLevel: String(event.level) } : state);
     if (event.type === "session_info_changed") setRpcState((state) => state ? { ...state, sessionName: typeof event.name === "string" ? event.name : undefined } : state);
+    if (event.type === "agent_settled") {
+      command({ type: "get_session_stats" });
+      command({ type: "get_entries" });
+    }
     if (event.type === "extension_error") addToast(`Extension error: ${String(event.error ?? event.extensionPath ?? "unknown")}`, "error");
     if (event.type === "extension_ui_request") handleExtensionUi(event as unknown as ExtensionUiRequest);
   };
 
   const handleExtensionUi = (request: ExtensionUiRequest) => {
-    if (["select", "confirm", "input", "editor"].includes(request.method)) setDialog(request);
+    if (["select", "confirm", "input", "editor"].includes(request.method)) {
+      setDialogs((items) => items.some((item) => item.id === request.id) ? items : [...items, request]);
+      if (typeof request.timeout === "number" && request.timeout > 0) {
+        window.setTimeout(() => setDialogs((items) => items.filter((item) => item.id !== request.id)), request.timeout);
+      }
+    }
     if (request.method === "notify") addToast(request.message ?? "Extension notification", request.notifyType ?? "info");
     if (request.method === "setStatus" && request.statusKey) setStatuses((items) => updateKey(items, request.statusKey!, request.statusText));
     if (request.method === "setWidget" && request.widgetKey) setWidgets((items) => updateKey(items, request.widgetKey!, request.widgetLines));
@@ -100,17 +116,29 @@ export function usePiui() {
   const start = useCallback((cwd: string, trust: boolean, sessionPath?: string) => {
     setConversation(emptyConversation);
     setRpcState(undefined);
+    setModels([]);
+    setThinkingLevels([]);
+    setCommands([]);
+    setStats({});
+    setEntries([]);
+    setDialogs([]);
+    setStatuses({});
+    setWidgets({});
+    setEditorInjection(undefined);
     send({ kind: "start", cwd, trust, ...(sessionPath ? { sessionPath } : {}) });
   }, [send]);
   const respondToDialog = useCallback((response: Record<string, unknown>) => {
+    const dialog = dialogs[0];
     if (!dialog) return;
     send({ kind: "extension_response", response: { type: "extension_ui_response", id: dialog.id, ...response } });
-    setDialog(undefined);
-  }, [dialog, send]);
+    setDialogs((items) => items.slice(1));
+  }, [dialogs, send]);
+
+  const ready = connected && runtime.status === "running" && rpcState !== undefined && models.length > 0;
 
   return {
-    connected, runtime, catalog, conversation, rpcState, models, thinkingLevels, commands, stats,
-    dialog, statuses, widgets, editorInjection, setEditorInjection, toasts, addToast,
+    connected, ready, runtime, catalog, conversation, rpcState, models, thinkingLevels, commands, stats, entries,
+    dialog: dialogs[0], statuses, widgets, editorInjection, setEditorInjection, toasts, addToast,
     command, start, respondToDialog,
     refreshCatalog: (cwd?: string) => send({ kind: "refresh_catalog", ...(cwd ? { cwd } : {}) }),
     stop: () => send({ kind: "stop_runtime" }),

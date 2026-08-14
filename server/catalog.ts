@@ -3,6 +3,7 @@ import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { resolvePiCli } from "./pi-process.js";
 
 const execFileAsync = promisify(execFile);
@@ -35,50 +36,23 @@ interface SessionHeader {
 
 export async function listSessions(agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")) {
   const root = join(agentDir, "sessions");
-  const paths = await findFiles(root, (name) => name.endsWith(".jsonl"));
-  const sessions = await Promise.all(paths.map((path) => inspectSession(path)));
-  return sessions
-    .filter((item): item is SessionCatalogItem => item !== undefined)
-    .sort((a, b) => b.modified.localeCompare(a.modified));
-}
-
-async function inspectSession(path: string): Promise<SessionCatalogItem | undefined> {
+  let directories: string[] = [];
   try {
-    const [content, fileStat] = await Promise.all([readFile(path, "utf8"), stat(path)]);
-    const lines = content.split("\n").filter(Boolean);
-    const header = JSON.parse(lines[0] ?? "null") as SessionHeader | null;
-    if (!header || header.type !== "session" || typeof header.cwd !== "string") return undefined;
-    let name: string | undefined;
-    let firstMessage = "";
-    let messageCount = 0;
-    for (const line of lines.slice(1)) {
-      let entry: Record<string, unknown>;
-      try { entry = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
-      if (entry.type === "session_info" && typeof entry.name === "string") name = entry.name;
-      if (entry.type !== "message" || !entry.message || typeof entry.message !== "object") continue;
-      const message = entry.message as Record<string, unknown>;
-      messageCount += 1;
-      if (!firstMessage && message.role === "user") firstMessage = textContent(message.content).slice(0, 160);
-    }
-    return {
-      path,
-      id: header.id,
-      cwd: header.cwd,
-      ...(name ? { name } : {}),
-      created: header.timestamp,
-      modified: fileStat.mtime.toISOString(),
-      messageCount,
-      firstMessage,
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function textContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.flatMap((part) => part && typeof part === "object" && (part as { type?: string }).type === "text" ? [(part as { text?: string }).text ?? ""] : []).join("\n");
+    directories = (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+      .map((entry) => join(root, entry.name));
+  } catch { /* no session directory yet */ }
+  const sessions = (await Promise.all([SessionManager.listAll(root), ...directories.map((directory) => SessionManager.listAll(directory))])).flat();
+  return sessions.map((session): SessionCatalogItem => ({
+    path: session.path,
+    id: session.id,
+    cwd: session.cwd,
+    ...(session.name ? { name: session.name } : {}),
+    created: session.created.toISOString(),
+    modified: session.modified.toISOString(),
+    messageCount: session.messageCount,
+    firstMessage: session.firstMessage.slice(0, 160),
+  })).sort((a, b) => b.modified.localeCompare(a.modified));
 }
 
 export async function listExtensions(
@@ -162,21 +136,8 @@ async function findExtensionEntries(root: string): Promise<string[]> {
   }
 }
 
-async function findFiles(root: string, accept: (name: string) => boolean): Promise<string[]> {
-  try {
-    const entries = await readdir(root, { withFileTypes: true });
-    const nested = await Promise.all(entries.map(async (entry) => {
-      const path = join(root, entry.name);
-      if (entry.isDirectory()) return findFiles(path, accept);
-      return entry.isFile() && accept(entry.name) ? [path] : [];
-    }));
-    return nested.flat();
-  } catch {
-    return [];
-  }
-}
-
 export async function validateWorkspace(input: string): Promise<string> {
+  if (!input.trim()) throw new Error("Workspace directory is required");
   const path = await realpath(resolve(input));
   if (!(await stat(path)).isDirectory()) throw new Error("Workspace must be a directory");
   return path.endsWith(sep) && path !== sep ? path.slice(0, -1) : path;
@@ -186,4 +147,12 @@ export async function validateSessionPath(path: string, agentDir = process.env.P
   const [resolvedPath, sessionRoot] = await Promise.all([realpath(resolve(path)), realpath(join(agentDir, "sessions"))]);
   if (!resolvedPath.startsWith(`${sessionRoot}${sep}`) || !resolvedPath.endsWith(".jsonl")) throw new Error("Session path is outside PI's session directory");
   return resolvedPath;
+}
+
+export async function sessionWorkspace(path: string, agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")): Promise<string> {
+  const resolvedPath = await validateSessionPath(path, agentDir);
+  const firstLine = (await readFile(resolvedPath, "utf8")).split("\n", 1)[0];
+  const header = JSON.parse(firstLine ?? "null") as SessionHeader | null;
+  if (!header || header.type !== "session" || typeof header.cwd !== "string" || !header.cwd.trim()) throw new Error("Session has no valid workspace");
+  return validateWorkspace(header.cwd);
 }
