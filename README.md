@@ -26,6 +26,12 @@ PIUI pins the matching PI runtime package so a clone uses a known protocol versi
 
 ## Run
 
+On macOS, you can double-click **Start PIUI.command** in the project folder. PIUI builds, starts its local server, and opens the interface in your browser.
+
+Do not open `index.html` directly: the `file://` page cannot connect to the PI server process.
+
+Or start it from a terminal:
+
 ```bash
 npm install
 npm run build
