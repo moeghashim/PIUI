@@ -111,7 +111,7 @@ npm run test:e2e
 
 `npm run test:real` runs an opt-in smoke against the installed/authenticated PI runtime. The default test suite uses a deterministic fake RPC process and does not spend model tokens.
 
-The current reference comparison, browser evidence, resolved findings, and testing limits are recorded in [`docs/qa/AUDIT.md`](docs/qa/AUDIT.md).
+The implemented product and visual contract is documented in [`design.md`](design.md). The current reference comparison, browser evidence, resolved findings, and testing limits are recorded in [`docs/qa/AUDIT.md`](docs/qa/AUDIT.md).
 
 ## Upstream references
 
